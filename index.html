@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Струм-тренажёр — семплы (↓ ↑ ✕ бас)</title>
+<meta name="description" content="Четвёрка, Шестёрка, Рок-4, Восьмёрка. Центрирование, крупные стрелки, точный планировщик и поддержка MP3/WAV/OGG семплов для каждого движения." />
+<style>
+  :root{
+    /* крупный масштаб и адаптивный зазор */
+    --step: clamp(90px, 14vw, 150px);
+    --gap:  clamp(20px, 4.8vw, 42px);
+
+    --bg:#0d111a;--bg2:#0f1530;--panel:#12182a;--line:#212b4a;--text:#eaf2ff;--muted:#a5b2cf;
+    --accent:#6cc7ff;--accent-2:#ffc76b;--btn-grad:linear-gradient(180deg,#3a4b86,#1f2a57);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;
+    background:radial-gradient(90vw 70vh at 50% -20%, var(--bg2), transparent 60%), linear-gradient(180deg,#0b1022,var(--bg));
+    display:flex;flex-direction:column
+  }
+  header{padding:12px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px}
+  .led{width:10px;height:10px;border-radius:50%;background:#18331f;box-shadow:0 0 0 1px #295232 inset}
+  .led.on{background:#1ee38d;box-shadow:0 0 22px 3px rgba(67,225,142,.6)}
+  .status{font-size:12px;color:#a5b2cf}
+
+  main{flex:1;display:flex;flex-direction:column;align-items:center}
+  .stage{flex:1;width:min(1400px,96vw);display:grid;place-items:center;position:relative}
+  .title{position:absolute;top:16px;font-size:16px;color:var(--muted);text-align:center;width:100%}
+
+  /* центрируем ряд стрелок как единую «картинку» */
+  .arrows{width:100%; display:grid; place-items:center; padding-bottom:28px}
+  .flowWrap{ display:block; width:max-content; }
+  .flow{
+    display:inline-flex; align-items:flex-end; justify-content:center; gap:var(--gap);
+    transform-origin:left top; will-change:transform;
+  }
+
+  .step{
+    position:relative; display:grid; place-items:center;
+    width:var(--step); height:var(--step);
+    transition:transform .12s ease-out; flex:0 0 auto;
+  }
+  .step.playable.active{transform:translateY(-8px)}
+  .number{position:absolute;top:-20px;left:50%;transform:translateX(-50%);color:var(--accent-2);font-weight:800;font-size:min(4.2vw,28px);text-shadow:0 4px 22px rgba(255,199,107,.35)}
+  .label-i{position:absolute;top:-18px;left:50%;transform:translateX(-50%);color:#cfd7f8;font-weight:700;font-size:min(3.8vw,18px)}
+
+  .arrow,.cross,.bass{width:76%;height:76%;stroke:var(--accent);fill:none;stroke-width:11;filter:drop-shadow(0 10px 26px rgba(117,211,255,.28));opacity:.95}
+  .arrow.up{transform:rotate(180deg)}
+  .cross path{stroke-linecap:round;stroke-linejoin:round}
+  .accent-ring{position:absolute;inset:-10px;border-radius:22px;box-shadow:0 0 0 0 rgba(255,199,107,0);transition:.12s}
+  .step.playable.accent .accent-ring{box-shadow:0 0 0 7px rgba(255,199,107,.22)}
+
+  .controls{width:min(1400px,96vw);display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;padding:16px;background:rgba(12,16,30,.72);border-top:1px solid var(--line)}
+  .row{display:flex;align-items:center;gap:10px;background:var(--panel);padding:10px 14px;border-radius:14px;border:1px solid var(--line)}
+  .btn{appearance:none;border:0;background:var(--btn-grad);color:#e5f2ff;padding:12px 16px;border-radius:14px;font-weight:800;cursor:pointer;border:1px solid #2e3b68;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 10px 28px rgba(20,40,120,.35)}
+  .btn:hover{transform:translateY(-1px)} .btn.play{background:linear-gradient(180deg,#4a67d8,#293a86)} .btn.stop{background:linear-gradient(180deg,#7a2535,#3e0f1b)}
+  .pill{border-radius:999px;padding:6px 10px;background:#11162a;border:1px solid #2a355f}
+  input[type=range]{accent-color:var(--accent);height:8px}
+  footer{padding:14px;text-align:center;color:var(--muted);font-size:12px}
+  .warn{color:#ffc76b;font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="led" id="led"></span>
+    <h1 style="margin:0;font-size:18px">Струм-тренажёр</h1>
+  </div>
+  <div class="status" id="status">Звуки: загружаю…</div>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="title" id="title">Загрузка…</div>
+    <div class="arrows">
+      <div id="wrap" class="flowWrap"><div id="flow" class="flow"></div></div>
+    </div>
+  </section>
+
+  <section class="controls">
+    <div class="row" role="group" aria-label="Транспорт">
+      <button id="playBtn" class="btn play">▶️ Старт</button>
+      <button id="stopBtn" class="btn stop">⏹ Стоп</button>
+    </div>
+
+    <div class="row" role="group" aria-label="Темп">
+      <span>Темп</span>
+      <button id="bpmDown" class="btn">−</button>
+      <div class="pill"><span id="bpmVal">70</span> bpm</div>
+      <button id="bpmUp" class="btn">+</button>
+      <input id="bpmRange" type="range" min="30" max="220" value="70" style="width:260px">
+    </div>
+
+    <div class="row" role="group" aria-label="Паттерн">
+      <span>Паттерн</span>
+      <button class="btn" data-pattern="classic">Четвёрка</button>
+      <button class="btn" data-pattern="mute">С глушкой</button>
+      <button class="btn" data-pattern="rock">Рок-4</button>
+      <button class="btn" data-pattern="six">Шестёрка</button>
+      <button class="btn" data-pattern="sixMute">Шестёрка (глушка)</button>
+      <button class="btn" data-pattern="eight">Восьмёрка</button>
+    </div>
+
+    <div class="row">
+      <label for="accent">Акцент на «1»</label>
+      <input id="accent" type="checkbox" checked>
+    </div>
+  </section>
+</main>
+
+<footer id="fileWarn"></footer>
+
+<script>
+/* ========= ПАТТЕРНЫ =========
+   dir: 'down' | 'up' | 'x' (глушка) | 'bass' (бас) | 'rest' (пауза)
+   subDiv: 1 — четверти, 2 — восьмушки
+*/
+const PATTERNS = {
+  classic:{name:'Четвёрка', meter:'4/4', subDiv:1,
+    steps:[{dir:'down'},{dir:'up'},{dir:'down'},{dir:'up'}],
+    labels:['1','2','3','4']},
+
+  mute:{name:'Четвёрка с глушкой', meter:'4/4', subDiv:1,
+    steps:[{dir:'down'},{dir:'up'},{dir:'x'},{dir:'up'}],
+    labels:['1','2','3','4']},
+
+  rock:{name:'Рок-4', meter:'4/4', subDiv:2,
+    steps:[{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'up'}],
+    labels:['1','и','2','и','3','и','4','и']},
+
+  six:{name:'Шестёрка', meter:'4/4', subDiv:2,
+    steps:[{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'up'},{dir:'rest'},{dir:'up'},{dir:'down'},{dir:'up'}],
+    labels:['1','и','2','и','3','и','4','и']},
+
+  sixMute:{name:'Шестёрка (глушка)', meter:'4/4', subDiv:2,
+    steps:[{dir:'down'},{dir:'rest'},{dir:'x'},{dir:'up'},{dir:'rest'},{dir:'up'},{dir:'x'},{dir:'up'}],
+    labels:['1','и','2','и','3','и','4','и']},
+
+  /* Восьмёрка — как ты просил:
+     1↓: 1 и 2 и | 2↓: 3 и 4 | 3↑: и 5 | 4↑: и | 5↓: 6 и | 6↓: 7 и | 7↓: 8 | 8↑: и
+  */
+  eight:{name:'Восьмёрка', meter:'1–8', subDiv:2,
+    steps:[
+      {dir:'down'},{dir:'rest'},{dir:'rest'},{dir:'rest'},   // 1, и, 2, и
+      {dir:'down'},{dir:'rest'},{dir:'rest'},                // 3, и, 4
+      {dir:'up'},{dir:'rest'},                               // и, 5
+      {dir:'up'},                                            // и
+      {dir:'down'},{dir:'rest'},                             // 6, и
+      {dir:'down'},{dir:'rest'},                             // 7, и
+      {dir:'down'},{dir:'up'}                                // 8, и
+    ],
+    labels:['1','и','2','и','3','и','4','и','5','и','6','и','7','и','8','и']}
+};
+
+let current = PATTERNS.classic;
+
+/* ========= UI ========= */
+let nodes=[];
+function buildUI(){
+  const flow = document.getElementById('flow');
+  flow.innerHTML = '';
+
+  document.getElementById('title').textContent =
+    `${current.name} • ${current.meter}`;
+
+  current.steps.forEach((s,i)=>{
+    const step = document.createElement('div');
+    step.className = 'step';
+
+    const ring = document.createElement('div');
+    ring.className = 'accent-ring';
+    step.appendChild(ring);
+
+    const lbl = current.labels?.[i];
+    if(lbl){
+      const el = document.createElement('div');
+      el.className = (lbl==='и') ? 'label-i' : 'number';
+      el.textContent = (lbl==='и') ? 'И' : lbl;
+      step.appendChild(el);
+    }
+
+    if(s.dir!=='rest'){
+      step.classList.add('playable');
+      let svg;
+      if(s.dir==='x'){
+        svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('viewBox','0 0 120 120');
+        svg.classList.add('cross');
+        svg.innerHTML = "<path d='M30 30 L90 90 M90 30 L30 90' />";
+      }else if(s.dir==='bass'){
+        svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('viewBox','0 0 120 120');
+        svg.classList.add('bass');
+        svg.innerHTML = "<circle cx='60' cy='60' r='36' />";
+      }else{
+        svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('viewBox','0 0 100 120');
+        svg.classList.add('arrow'); if(s.dir==='up') svg.classList.add('up');
+        svg.innerHTML = "<path d='M50 10 L50 70 M25 70 L50 100 L75 70' stroke-linecap='round' stroke-linejoin='round'/>";
+      }
+      step.appendChild(svg);
+    }
+    flow.appendChild(step);
+  });
+
+  nodes = Array.from(flow.children);
+  fitPattern();
+}
+
+function fitPattern(){
+  const stageW = document.querySelector('.stage').clientWidth;
+  const wrap   = document.getElementById('wrap');
+  const flow   = document.getElementById('flow');
+
+  wrap.style.width = 'auto';                // «натуральная» ширина без скейла
+  const natural   = flow.scrollWidth;
+  const available = Math.max(200, stageW - 32);
+  const scale     = Math.min(1, available / natural);
+
+  flow.style.transform = `scale(${scale})`;
+  wrap.style.width     = (natural * scale) + 'px';   // центрируем визуально
+}
+window.addEventListener('resize', fitPattern);
+
+/* ========= АУДИО: WebAudio → HTMLAudio → клик ========= */
+const Audio = (()=>{
+  let ctx, master, noiseBuffer;
+  const buffers = Object.create(null); // name -> AudioBuffer
+  const pools   = Object.create(null); // name -> {url, pool[], idx}
+  const POOL = 6;
+
+  function ensure(){
+    if(!ctx){
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain(); master.connect(ctx.destination);
+      const N=2048; noiseBuffer=ctx.createBuffer(1,N,ctx.sampleRate);
+      const d=noiseBuffer.getChannelData(0); for(let i=0;i<N;i++) d[i]=Math.random()*2-1;
+    }
+    return ctx;
+  }
+
+  async function decode(url){
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const arr = await r.arrayBuffer();
+    return await ensure().decodeAudioData(arr);
+  }
+
+  function makePool(name, url){
+    const pool = [];
+    for(let i=0;i<POOL;i++){
+      const a = new window.Audio(url);
+      a.preload = 'auto';
+      a.crossOrigin = 'anonymous';
+      pool.push(a);
+    }
+    pools[name] = {url, pool, idx:0};
+  }
+
+  function playFromPool(name, when, gain){
+    const p = pools[name]; if(!p) return false;
+    const delay = Math.max(0, (when - ensure().currentTime)*1000);
+    const i = p.idx = (p.idx + 1) % p.pool.length;
+    const a = p.pool[i].cloneNode(); a.volume = Math.max(0,Math.min(1,gain));
+    setTimeout(()=>{ a.currentTime=0; a.play().catch(()=>{}); }, delay);
+    return true;
+  }
+
+  function click(name, when, gain){
+    const cfg = {
+      down:{f:1200, ng:.22, tail:.08},
+      up:  {f:1500, ng:.22, tail:.08},
+      mute:{f:700,  ng:.28, tail:.05},
+      bass:{f:250,  ng:.18, tail:.10}
+    }[name] || {f:1200, ng:.22, tail:.08};
+    const c=ensure();
+    const osc=c.createOscillator(); osc.type='sine'; osc.frequency.setValueAtTime(cfg.f,when);
+    const og=c.createGain(); og.gain.setValueAtTime(0.0001,when);
+    og.gain.exponentialRampToValueAtTime(gain,when+0.002);
+    og.gain.exponentialRampToValueAtTime(0.0001,when+cfg.tail);
+    const sn=c.createBufferSource(); sn.buffer=noiseBuffer;
+    const ng=c.createGain(); ng.gain.setValueAtTime(cfg.ng,when);
+    ng.gain.exponentialRampToValueAtTime(0.0001,when+0.03);
+    osc.connect(og); og.connect(master); sn.connect(ng); ng.connect(master);
+    osc.start(when); osc.stop(when+cfg.tail); sn.start(when); sn.stop(when+0.04);
+  }
+
+  function play(name, when, {gain=1}={}){
+    if(buffers[name]){
+      const c=ensure();
+      const src=c.createBufferSource(); src.buffer=buffers[name];
+      const g=c.createGain(); g.gain.value=gain;
+      src.connect(g); g.connect(master);
+      src.start(when);
+      return;
+    }
+    if(playFromPool(name, when, gain)) return;
+    click(name, when, gain);
+  }
+
+  async function loadAll(map){
+    const report=[];
+    for(const [name, urls] of Object.entries(map)){
+      let loaded=false, used='';
+      for(const u of urls){
+        try{
+          buffers[name] = await decode(u);
+          loaded=true; used=u; break;
+        }catch(_){ /* попробуем следующий */ }
+      }
+      if(!loaded){
+        // даже если файл не существует — пусть браузер попробует подгрузить
+        makePool(name, urls[0]);
+      }
+      report.push([name, loaded, loaded?used:urls[0]]);
+    }
+    return report;
+  }
+
+  function unlock(){ const c=ensure(); if(c.state==='suspended') c.resume(); }
+
+  return {play, loadAll, unlock, ensure};
+})();
+
+/* === загрузка семплов === */
+(async()=>{
+  const status = document.getElementById('status');
+  if(location.protocol==='file:'){
+    document.getElementById('fileWarn').innerHTML =
+      '<span class="warn">Совет:</span> открывай через локальный сервер — fetch для file:// может быть заблокирован.';
+  }
+  const results = await Audio.loadAll({
+    down: ['sounds/down.mp3','sounds/down.wav','sounds/down.ogg'],
+    up:   ['sounds/up.mp3','sounds/up.wav','sounds/up.ogg'],
+    mute: ['sounds/mute.mp3','sounds/mute.wav','sounds/mute.ogg'],
+    bass: ['sounds/bass.mp3','sounds/bass.wav','sounds/bass.ogg']
+  });
+  const ok = results.filter(([,s])=>s).length;
+  status.textContent = `Звуки: ${ok}/${results.length} в буферах; остальные — через <audio>/клик`;
+})();
+
+/* ========= Планировщик ========= */
+const LED = document.getElementById('led');
+let state={bpm:70,running:false,idx:0,nextTime:0,timer:null};
+const lookAhead=0.1, intervalMs=25;
+
+function setBpm(v){
+  const n=Math.min(220,Math.max(30,v|0));
+  state.bpm=n; document.getElementById('bpmVal').textContent=n;
+  document.getElementById('bpmRange').value=n;
+}
+function spb(){ return 60/state.bpm; }
+
+function scheduleOne(when, idxFixed){
+  const len=current.steps.length;
+  const step=current.steps[idxFixed%len];
+  const playable = (step.dir!=='rest');
+
+  if(playable){
+    const name = (step.dir==='x') ? 'mute' : step.dir;
+    const accent = document.getElementById('accent').checked && (idxFixed%len===0);
+    const g = accent ? 1.5 : 1.0;
+    Audio.play(name, when, {gain:g});
+  }
+
+  // визуал
+  const delay = Math.max(0,(when - Audio.ensure().currentTime)*1000 - 8);
+  setTimeout(()=>{
+    nodes.forEach(n=>n.classList.remove('active','accent'));
+    const node=nodes[idxFixed%len];
+    if(node && playable){
+      node.classList.add('active');
+      if(document.getElementById('accent').checked && (idxFixed%len===0)){
+        node.classList.add('accent');
+      }
+    }
+    LED.classList.add('on');
+    setTimeout(()=>LED.classList.remove('on'),40);
+  }, delay);
+}
+
+function scheduler(){
+  const c=Audio.ensure();
+  while(state.nextTime < c.currentTime + lookAhead){
+    const i = state.idx;
+    scheduleOne(state.nextTime, i);
+    state.idx++;
+    state.nextTime += spb() / (current.subDiv || 1);
+  }
+}
+
+function play(){
+  if(state.running) return;
+  Audio.unlock();
+  const c=Audio.ensure();
+  state.running=true; state.idx=0; state.nextTime=c.currentTime+0.08;
+  clearInterval(state.timer);
+  state.timer=setInterval(scheduler, intervalMs);
+}
+function stop(){
+  if(!state.running && !state.timer) return;
+  state.running=false; clearInterval(state.timer); state.timer=null; state.idx=0;
+  nodes.forEach(n=>n.classList.remove('active','accent'));
+}
+
+/* ========= Инициализация и управление ========= */
+current = PATTERNS.classic;
+buildUI(); setBpm(70);
+
+document.getElementById('playBtn').addEventListener('click', play);
+document.getElementById('stopBtn').addEventListener('click', stop);
+document.getElementById('bpmRange').addEventListener('input', e=> setBpm(e.target.value));
+document.getElementById('bpmDown').addEventListener('click',()=> setBpm(state.bpm-2));
+document.getElementById('bpmUp').addEventListener('click',()=> setBpm(state.bpm+2));
+
+document.querySelectorAll('[data-pattern]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const name=btn.getAttribute('data-pattern');
+    current = PATTERNS[name] || PATTERNS.classic;
+    buildUI(); stop();
+  });
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){ e.preventDefault(); state.running?stop():play(); }
+  if(e.code==='ArrowUp'){ setBpm(state.bpm+1); }
+  if(e.code==='ArrowDown'){ setBpm(state.bpm-1); }
+});
+</script>
+</body>
+</html> 
