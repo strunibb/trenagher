@@ -7,7 +7,6 @@
 <meta name="description" content="Четвёрка, Шестёрка, Рок-4, Восьмёрка. Центрирование, крупные стрелки, точный планировщик и поддержка MP3/WAV/OGG семплов для каждого движения." />
 <style>
   :root{
-    /* крупный масштаб и адаптивный зазор */
     --step: clamp(90px, 14vw, 150px);
     --gap:  clamp(20px, 4.8vw, 42px);
 
@@ -31,7 +30,6 @@
   .stage{flex:1;width:min(1400px,96vw);display:grid;place-items:center;position:relative}
   .title{position:absolute;top:16px;font-size:16px;color:var(--muted);text-align:center;width:100%}
 
-  /* центрируем ряд стрелок как единую «картинку» */
   .arrows{width:100%; display:grid; place-items:center; padding-bottom:28px}
   .flowWrap{ display:block; width:max-content; }
   .flow{
@@ -56,7 +54,7 @@
 
   .controls{width:min(1400px,96vw);display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;padding:16px;background:rgba(12,16,30,.72);border-top:1px solid var(--line)}
   .row{display:flex;align-items:center;gap:10px;background:var(--panel);padding:10px 14px;border-radius:14px;border:1px solid var(--line)}
-  .btn{appearance:none;border:0;background:var(--btn-grad);color:#e5f2ff;padding:12px 16px;border-radius:14px;font-weight:800;cursor:pointer;border:1px solid #2e3b68;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 10px 28px rgba(20,40,120,.35)}
+  .btn{appearance:none;border:0;background:var(--btn-grad);color:var(--text);padding:12px 16px;border-radius:14px;font-weight:800;cursor:pointer;border:1px solid #2e3b68;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 10px 28px rgba(20,40,120,.35)}
   .btn:hover{transform:translateY(-1px)} .btn.play{background:linear-gradient(180deg,#4a67d8,#293a86)} .btn.stop{background:linear-gradient(180deg,#7a2535,#3e0f1b)}
   .pill{border-radius:999px;padding:6px 10px;background:#11162a;border:1px solid #2a355f}
   input[type=range]{accent-color:var(--accent);height:8px}
@@ -115,43 +113,32 @@
 <footer id="fileWarn"></footer>
 
 <script>
-/* ========= ПАТТЕРНЫ =========
-   dir: 'down' | 'up' | 'x' (глушка) | 'bass' (бас) | 'rest' (пауза)
-   subDiv: 1 — четверти, 2 — восьмушки
-*/
+/* ========= ПАТТЕРНЫ ========= */
 const PATTERNS = {
   classic:{name:'Четвёрка', meter:'4/4', subDiv:1,
     steps:[{dir:'down'},{dir:'up'},{dir:'down'},{dir:'up'}],
     labels:['1','2','3','4']},
-
   mute:{name:'Четвёрка с глушкой', meter:'4/4', subDiv:1,
     steps:[{dir:'down'},{dir:'up'},{dir:'x'},{dir:'up'}],
     labels:['1','2','3','4']},
-
   rock:{name:'Рок-4', meter:'4/4', subDiv:2,
     steps:[{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'up'}],
     labels:['1','и','2','и','3','и','4','и']},
-
   six:{name:'Шестёрка', meter:'4/4', subDiv:2,
     steps:[{dir:'down'},{dir:'rest'},{dir:'down'},{dir:'up'},{dir:'rest'},{dir:'up'},{dir:'down'},{dir:'up'}],
     labels:['1','и','2','и','3','и','4','и']},
-
   sixMute:{name:'Шестёрка (глушка)', meter:'4/4', subDiv:2,
     steps:[{dir:'down'},{dir:'rest'},{dir:'x'},{dir:'up'},{dir:'rest'},{dir:'up'},{dir:'x'},{dir:'up'}],
     labels:['1','и','2','и','3','и','4','и']},
-
-  /* Восьмёрка — как ты просил:
-     1↓: 1 и 2 и | 2↓: 3 и 4 | 3↑: и 5 | 4↑: и | 5↓: 6 и | 6↓: 7 и | 7↓: 8 | 8↑: и
-  */
   eight:{name:'Восьмёрка', meter:'1–8', subDiv:2,
     steps:[
-      {dir:'down'},{dir:'rest'},{dir:'rest'},{dir:'rest'},   // 1, и, 2, и
-      {dir:'down'},{dir:'rest'},{dir:'rest'},                // 3, и, 4
-      {dir:'up'},{dir:'rest'},                               // и, 5
-      {dir:'up'},                                            // и
-      {dir:'down'},{dir:'rest'},                             // 6, и
-      {dir:'down'},{dir:'rest'},                             // 7, и
-      {dir:'down'},{dir:'up'}                                // 8, и
+      {dir:'down'},{dir:'rest'},{dir:'rest'},{dir:'rest'},
+      {dir:'down'},{dir:'rest'},{dir:'rest'},
+      {dir:'up'},{dir:'rest'},
+      {dir:'up'},
+      {dir:'down'},{dir:'rest'},
+      {dir:'down'},{dir:'rest'},
+      {dir:'down'},{dir:'up'}
     ],
     labels:['1','и','2','и','3','и','4','и','5','и','6','и','7','и','8','и']}
 };
@@ -216,27 +203,34 @@ function fitPattern(){
   const wrap   = document.getElementById('wrap');
   const flow   = document.getElementById('flow');
 
-  wrap.style.width = 'auto';                // «натуральная» ширина без скейла
+  wrap.style.width = 'auto';
   const natural   = flow.scrollWidth;
   const available = Math.max(200, stageW - 32);
   const scale     = Math.min(1, available / natural);
 
   flow.style.transform = `scale(${scale})`;
-  wrap.style.width     = (natural * scale) + 'px';   // центрируем визуально
+  wrap.style.width     = (natural * scale) + 'px';
 }
 window.addEventListener('resize', fitPattern);
 
 /* ========= АУДИО: WebAudio → HTMLAudio → клик ========= */
 const Audio = (()=>{
-  let ctx, master, noiseBuffer;
+  let ctx, master, gate, noiseBuffer;
   const buffers = Object.create(null); // name -> AudioBuffer
   const pools   = Object.create(null); // name -> {url, pool[], idx}
   const POOL = 6;
+  let currentEl = null; // <<< последний HTMLAudio
+  const CUT_PRE = 0.002, CUT_FADE = 0.005; // <<< параметры среза
 
   function ensure(){
     if(!ctx){
       ctx = new (window.AudioContext || window.webkitAudioContext)();
-      master = ctx.createGain(); master.connect(ctx.destination);
+      master = ctx.createGain();
+      gate   = ctx.createGain();         // <<< гейт, через который идёт весь звук
+      gate.gain.value = 1;
+      gate.connect(master);
+      master.connect(ctx.destination);
+
       const N=2048; noiseBuffer=ctx.createBuffer(1,N,ctx.sampleRate);
       const d=noiseBuffer.getChannelData(0); for(let i=0;i<N;i++) d[i]=Math.random()*2-1;
     }
@@ -265,40 +259,66 @@ const Audio = (()=>{
     const p = pools[name]; if(!p) return false;
     const delay = Math.max(0, (when - ensure().currentTime)*1000);
     const i = p.idx = (p.idx + 1) % p.pool.length;
-    const a = p.pool[i].cloneNode(); a.volume = Math.max(0,Math.min(1,gain));
-    setTimeout(()=>{ a.currentTime=0; a.play().catch(()=>{}); }, delay);
+    const a = p.pool[i].cloneNode();
+    a.volume = Math.max(0,Math.min(1,gain));
+
+    setTimeout(()=>{
+      // <<< перед стартом нового — стопаем предыдущий HTMLAudio
+      if(currentEl){ try{ currentEl.pause(); currentEl.currentTime = 0; }catch(_){ } }
+      currentEl = a;
+      a.currentTime=0; a.play().catch(()=>{});
+    }, delay);
     return true;
+  }
+
+  // <<< мягкий срез перед каждым новым шагом для WebAudio-ветки
+  function cut(when){
+    const c = ensure();
+    const t0 = Math.max(c.currentTime, when - CUT_PRE);
+    gate.gain.cancelScheduledValues(0);
+    gate.gain.setValueAtTime(0.0001, t0);
+    gate.gain.linearRampToValueAtTime(1, t0 + CUT_FADE);
   }
 
   function click(name, when, gain){
     const cfg = {
-      down:{f:1200, ng:.22, tail:.08},
-      up:  {f:1500, ng:.22, tail:.08},
-      mute:{f:700,  ng:.28, tail:.05},
-      bass:{f:250,  ng:.18, tail:.10}
-    }[name] || {f:1200, ng:.22, tail:.08};
+      down:{f:1200, ng:.22, tail:.06},
+      up:  {f:1500, ng:.22, tail:.06},
+      mute:{f:700,  ng:.28, tail:.04},
+      bass:{f:250,  ng:.18, tail:.08}
+    }[name] || {f:1200, ng:.22, tail:.06};
     const c=ensure();
+
+    cut(when); // <<< срез хвоста перед стартом клика
+
     const osc=c.createOscillator(); osc.type='sine'; osc.frequency.setValueAtTime(cfg.f,when);
     const og=c.createGain(); og.gain.setValueAtTime(0.0001,when);
     og.gain.exponentialRampToValueAtTime(gain,when+0.002);
     og.gain.exponentialRampToValueAtTime(0.0001,when+cfg.tail);
+
     const sn=c.createBufferSource(); sn.buffer=noiseBuffer;
     const ng=c.createGain(); ng.gain.setValueAtTime(cfg.ng,when);
     ng.gain.exponentialRampToValueAtTime(0.0001,when+0.03);
-    osc.connect(og); og.connect(master); sn.connect(ng); ng.connect(master);
-    osc.start(when); osc.stop(when+cfg.tail); sn.start(when); sn.stop(when+0.04);
+
+    osc.connect(og); og.connect(gate);   // <<< в гейт
+    sn.connect(ng); ng.connect(gate);    // <<< в гейт
+
+    osc.start(when); osc.stop(when+cfg.tail);
+    sn.start(when);  sn.stop(when+0.04);
   }
 
   function play(name, when, {gain=1}={}){
     if(buffers[name]){
       const c=ensure();
+      cut(when); // <<< срез перед новым событием
+
       const src=c.createBufferSource(); src.buffer=buffers[name];
       const g=c.createGain(); g.gain.value=gain;
-      src.connect(g); g.connect(master);
+      src.connect(g); g.connect(gate);   // <<< через гейт
       src.start(when);
       return;
     }
-    if(playFromPool(name, when, gain)) return;
+    if(playFromPool(name, when, gain)) return; // htmlAudio-ветка сама стопает предыдущее
     click(name, when, gain);
   }
 
@@ -310,10 +330,9 @@ const Audio = (()=>{
         try{
           buffers[name] = await decode(u);
           loaded=true; used=u; break;
-        }catch(_){ /* попробуем следующий */ }
+        }catch(_){ }
       }
       if(!loaded){
-        // даже если файл не существует — пусть браузер попробует подгрузить
         makePool(name, urls[0]);
       }
       report.push([name, loaded, loaded?used:urls[0]]);
@@ -432,4 +451,4 @@ document.addEventListener('keydown',e=>{
 });
 </script>
 </body>
-</html> 
+</html>
