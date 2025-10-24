@@ -118,19 +118,12 @@
 
 <script>
 /* ========= ПАТТЕРНЫ ========= */
-/* dir:
-   'down' | 'up' — обычные удары по всем струнам
-   'sdown' | 'sup' — маленькие стрелки (удар только по басовым струнам)
-   'x' — глушка; 'bass' — одиночный бас; 'rest' — пауза
-   'deadDown' | 'deadUp' — мертвый удар вниз/вверх; 'bassDown' | 'bassUp' — басовый удар вниз/вверх
-*/
 const PATTERNS = {
   classic:{name:'Четвёрка', meter:'4/4', subDiv:1,
     steps:[{dir:'down'},{dir:'up'},{dir:'down'},{dir:'up'}],
     labels:['1','2','3','4']},
 
   classicAccent:{name:'Четвёрка (акцент)', meter:'4/4', subDiv:1,
-    // первые два — басовые удары
     steps:[{dir:'bassDown'},{dir:'bassUp'},{dir:'down'},{dir:'up'}],
     labels:['1','2','3','4']},
 
@@ -139,7 +132,6 @@ const PATTERNS = {
     labels:['1','2','3','4']},
 
   rock:{name:'Рок-4', meter:'4/4', subDiv:2,
-    // 1 и 2 — басовые удары
     steps:[
       {dir:'bassDown'},{dir:'rest'},
       {dir:'bassDown'},{dir:'rest'},
@@ -169,7 +161,6 @@ const PATTERNS = {
     labels:['1','и','2','и','3','и','4','и','5','и','6','и','7','и','8','и']},
 
   reggae:{name:'Регги', meter:'4/4', subDiv:2,
-    // 1 — бас; 2 — вниз; "и" после 2 — вверх; 3 — глушка; 4 — вниз
     steps:[{dir:'bass'},{dir:'rest'},{dir:'down'},{dir:'up'},{dir:'x'},{dir:'rest'},{dir:'down'},{dir:'rest'}],
     labels:['1','и','2','и','3','и','4','и']}
 };
@@ -209,7 +200,7 @@ function buildUI(){
         svg.setAttribute('viewBox','0 0 120 120');
         svg.classList.add('cross');
         svg.innerHTML = "<path d='M30 30 L90 90 M90 30 L30 90' />";
-      }else if(s.dir==='bass'){
+      }else if(s.dir==='bass' || s.dir==='bassDown' || s.dir==='bassUp'){
         svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
         svg.setAttribute('viewBox','0 0 120 120');
         svg.classList.add('bass');
@@ -280,7 +271,7 @@ const Audio = (()=>{
   function makePool(name, url){
     const pool = [];
     for(let i=0;i<POOL;i++){
-      const a = new window.Audio(url);
+      const a = new Audio(url);
       a.preload = 'auto';
       a.crossOrigin = 'anonymous';
       pool.push(a);
@@ -353,19 +344,32 @@ const Audio = (()=>{
   }
 
   async function loadAll(map){
+    // map: name -> [candidate-url, ...]
     const report=[];
     for(const [name, urls] of Object.entries(map)){
       let loaded=false, used='';
       for(const u of urls){
         try{
+          // попытка декодирования (лучший вариант)
           buffers[name] = await decode(u);
-          loaded=true; used=u; break;
-        }catch(_){ }
+          loaded=true; used=u; console.log(`[audio] decoded ${name} <- ${u}`);
+          break;
+        }catch(err){
+          // decode не прошёл — попробуем проверить, существует ли файл для pool (fetch)
+          try{
+            const head = await fetch(u, {method:'HEAD', cache:'no-store'});
+            if(head.ok){
+              // файл есть — создаём pool на нём (fallback)
+              makePool(name, u);
+              loaded=false; used=u; console.log(`[audio] pool for ${name} <- ${u}`);
+              break;
+            }
+          }catch(_){ /* пропустить */ }
+          // пробуем следующий URL
+        }
       }
-      if(!loaded){
-        makePool(name, urls[0]);
-      }
-      report.push([name, loaded, loaded?used:urls[0]]);
+      if(!used) used = urls[0] || '';
+      report.push([name, loaded, used]);
     }
     return report;
   }
@@ -375,25 +379,41 @@ const Audio = (()=>{
   return {play, loadAll, unlock, ensure};
 })();
 
-/* === загрузка семплов === */
+/* === загрузка семплов: пробуем несколько путей (sounds/... и корень), плюс fallbacks === */
 (async()=>{
   const status = document.getElementById('status');
   if(location.protocol==='file:'){
     document.getElementById('fileWarn').innerHTML =
       '<span class="warn">Совет:</span> открывай через локальный сервер — fetch для file:// может быть заблокирован.';
   }
-  const results = await Audio.loadAll({
-    down: ['sounds/down.mp3','sounds/down.wav','sounds/down.ogg'],
-    up:   ['sounds/up.mp3','sounds/up.wav','sounds/up.ogg'],
-    mute: ['sounds/mute.mp3','sounds/mute.wav','sounds/mute.ogg'],
-    bass: ['sounds/bass.mp3','sounds/bass.wav','sounds/bass.ogg'],
-    deadDown: ['sounds/dead-down.mp3','sounds/dead-down.wav','sounds/dead-down.ogg'],
-    deadUp:   ['sounds/dead-up.mp3','sounds/dead-up.wav','sounds/dead-up.ogg'],
-    bassDown: ['sounds/bass-down.mp3','sounds/bass-down.wav','sounds/bass-down.ogg'],
-    bassUp:   ['sounds/bass-up.mp3','sounds/bass-up.wav','sounds/bass-up.ogg']
-  });
-  const ok = results.filter(([,s])=>s).length;
-  status.textContent = `Звуки: ${ok}/${results.length} в буферах; остальные — через <audio>/клик`;
+
+  // Для каждого логического имени — список кандидатов (порядок важен)
+  const candidates = {
+    down:    ['sounds/down.mp3','down.mp3','sounds/down.wav','down.wav','sounds/down.ogg','down.ogg'],
+    up:      ['sounds/up.mp3','up.mp3','sounds/up.wav','up.wav','sounds/up.ogg','up.ogg'],
+    mute:    ['sounds/mute.mp3','mute.mp3','sounds/mute.wav','mute.wav','sounds/mute.ogg','mute.ogg'],
+    bass:    ['sounds/bass.mp3','bass.mp3','sounds/bass.wav','bass.wav','sounds/bass.ogg','bass.ogg'],
+
+    // новые семплы — но добавляем fallback-списки на существующие файлы, если их нет
+    deadDown:['sounds/dead-down.mp3','dead-down.mp3','sounds/dead_down.mp3','dead_down.mp3','sounds/mute.mp3','mute.mp3','sounds/down.mp3','down.mp3'],
+    deadUp:  ['sounds/dead-up.mp3','dead-up.mp3','sounds/dead_up.mp3','dead_up.mp3','sounds/mute.mp3','mute.mp3','sounds/up.mp3','up.mp3'],
+
+    bassDown:['sounds/bass-down.mp3','bass-down.mp3','sounds/bass_down.mp3','bass_down.mp3','sounds/bass.mp3','bass.mp3','sounds/down.mp3','down.mp3'],
+    bassUp:  ['sounds/bass-up.mp3','bass-up.mp3','sounds/bass_up.mp3','bass_up.mp3','sounds/bass.mp3','bass.mp3','sounds/up.mp3','up.mp3']
+  };
+
+  console.log('[audio] trying to load samples (candidates):', candidates);
+  const results = await Audio.loadAll(candidates);
+
+  // results: [ [name, loaded(true/false decode), usedUrl], ... ]
+  let ok = 0;
+  const lines = [];
+  for(const [name, loaded, used] of results){
+    if(loaded) ok++;
+    lines.push(`${name}: ${loaded? 'decoded' : 'pool/fallback'} ← ${used}`);
+  }
+  status.textContent = `Звуки: ${ok}/${results.length} загружено в буферы; детали в консоли.`;
+  console.log('[audio] load results:\n' + lines.join('\n'));
 })();
 
 /* ========= Планировщик ========= */
