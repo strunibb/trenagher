@@ -120,8 +120,9 @@
 /* ========= ПАТТЕРНЫ ========= */
 /* dir:
    'down' | 'up' — обычные удары по всем струнам
-   'sdown' | 'sup' — МАЛЕНЬКИЕ стрелки (удар только по басовым струнам; звучит семплом 'bass')
+   'sdown' | 'sup' — маленькие стрелки (удар только по басовым струнам)
    'x' — глушка; 'bass' — одиночный бас; 'rest' — пауза
+   'deadDown' | 'deadUp' — мертвый удар вниз/вверх; 'bassDown' | 'bassUp' — басовый удар вниз/вверх
 */
 const PATTERNS = {
   classic:{name:'Четвёрка', meter:'4/4', subDiv:1,
@@ -129,8 +130,8 @@ const PATTERNS = {
     labels:['1','2','3','4']},
 
   classicAccent:{name:'Четвёрка (акцент)', meter:'4/4', subDiv:1,
-    // первые два — маленькие (басовые) по ТЗ
-    steps:[{dir:'sdown'},{dir:'sup'},{dir:'down'},{dir:'up'}],
+    // первые два — басовые удары
+    steps:[{dir:'bassDown'},{dir:'bassUp'},{dir:'down'},{dir:'up'}],
     labels:['1','2','3','4']},
 
   mute:{name:'Четвёрка с глушкой', meter:'4/4', subDiv:1,
@@ -138,10 +139,10 @@ const PATTERNS = {
     labels:['1','2','3','4']},
 
   rock:{name:'Рок-4', meter:'4/4', subDiv:2,
-    // 1 и 2 — маленькие
+    // 1 и 2 — басовые удары
     steps:[
-      {dir:'sdown'},{dir:'rest'},
-      {dir:'sdown'},{dir:'rest'},
+      {dir:'bassDown'},{dir:'rest'},
+      {dir:'bassDown'},{dir:'rest'},
       {dir:'down'},{dir:'rest'},
       {dir:'down'},{dir:'up'}
     ],
@@ -168,7 +169,7 @@ const PATTERNS = {
     labels:['1','и','2','и','3','и','4','и','5','и','6','и','7','и','8','и']},
 
   reggae:{name:'Регги', meter:'4/4', subDiv:2,
-    // по картинке: 1 — бас; 2 — вниз; "и" после 2 — вверх; 3 — глушка; 4 — вниз
+    // 1 — бас; 2 — вниз; "и" после 2 — вверх; 3 — глушка; 4 — вниз
     steps:[{dir:'bass'},{dir:'rest'},{dir:'down'},{dir:'up'},{dir:'x'},{dir:'rest'},{dir:'down'},{dir:'rest'}],
     labels:['1','и','2','и','3','и','4','и']}
 };
@@ -203,7 +204,7 @@ function buildUI(){
     if(s.dir!=='rest'){
       step.classList.add('playable');
       let svg;
-      if(s.dir==='x'){
+      if(s.dir==='x' || s.dir==='deadDown' || s.dir==='deadUp'){
         svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
         svg.setAttribute('viewBox','0 0 120 120');
         svg.classList.add('cross');
@@ -217,8 +218,8 @@ function buildUI(){
         svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
         svg.setAttribute('viewBox','0 0 100 120');
         svg.classList.add('arrow');
-        if(s.dir==='up' || s.dir==='sup') svg.classList.add('up');
-        if(s.dir==='sdown' || s.dir==='sup') svg.classList.add('small'); // маленькие
+        if(s.dir==='up' || s.dir==='sup' || s.dir==='bassUp') svg.classList.add('up');
+        if(s.dir==='sdown' || s.dir==='sup') svg.classList.add('small');
         svg.innerHTML = "<path d='M50 10 L50 70 M25 70 L50 100 L75 70' stroke-linecap='round' stroke-linejoin='round'/>";
       }
       step.appendChild(svg);
@@ -385,7 +386,11 @@ const Audio = (()=>{
     down: ['sounds/down.mp3','sounds/down.wav','sounds/down.ogg'],
     up:   ['sounds/up.mp3','sounds/up.wav','sounds/up.ogg'],
     mute: ['sounds/mute.mp3','sounds/mute.wav','sounds/mute.ogg'],
-    bass: ['sounds/bass.mp3','sounds/bass.wav','sounds/bass.ogg']
+    bass: ['sounds/bass.mp3','sounds/bass.wav','sounds/bass.ogg'],
+    deadDown: ['sounds/dead-down.mp3','sounds/dead-down.wav','sounds/dead-down.ogg'],
+    deadUp:   ['sounds/dead-up.mp3','sounds/dead-up.wav','sounds/dead-up.ogg'],
+    bassDown: ['sounds/bass-down.mp3','sounds/bass-down.wav','sounds/bass-down.ogg'],
+    bassUp:   ['sounds/bass-up.mp3','sounds/bass-up.wav','sounds/bass-up.ogg']
   });
   const ok = results.filter(([,s])=>s).length;
   status.textContent = `Звуки: ${ok}/${results.length} в буферах; остальные — через <audio>/клик`;
@@ -412,13 +417,17 @@ function scheduleOne(when, idxFixed){
     // карта звука
     let name;
     if(step.dir==='x') name='mute';
+    else if(step.dir==='deadDown') name='deadDown';
+    else if(step.dir==='deadUp') name='deadUp';
+    else if(step.dir==='bassDown') name='bassDown';
+    else if(step.dir==='bassUp') name='bassUp';
     else if(step.dir==='sdown' || step.dir==='sup' || step.dir==='bass') name='bass';
     else if(step.dir==='down') name='down';
     else if(step.dir==='up') name='up';
     else name='down';
 
     const accent1 = document.getElementById('accent').checked && (idxFixed%len===0);
-    const baseGain = (step.dir==='sdown' || step.dir==='sup') ? 0.9 : 1.0; // маленькие чуть тише
+    const baseGain = (step.dir==='sdown' || step.dir==='sup') ? 0.9 : 1.0;
     const g = (accent1 ? 1.5 : 1.0) * baseGain;
 
     Audio.play(name, when, {gain:g});
